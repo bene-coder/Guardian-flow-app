@@ -1,0 +1,4 @@
+backend/.env
+
+backend/ scripts/
+node_modules/
