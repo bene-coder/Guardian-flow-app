@@ -10,4 +10,3 @@ android/
 .gradle/
 *.jks
 *.keystore
-.env.example
