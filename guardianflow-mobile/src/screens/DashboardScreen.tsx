@@ -11,9 +11,11 @@ import {
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useAuth } from '../context/AuthContext';
+import { getSocket } from '../config/socket';
 
 export default function DashboardScreen() {
     const { user, signOut } = useAuth();
+    const socket = getSocket();
 
     // Location States
     const [location, setLocation] = useState<Location.LocationObject | null>(null);
@@ -54,7 +56,21 @@ export default function DashboardScreen() {
                 },
                 (newLocation) => {
                     setLocation(newLocation);
-                    // Auto-pan map to current location while driving
+
+                    // Emitting live coordinate stream to Express backend
+                    if (socket && socket.connected) {
+                        socket.emit('driver-telemetry', {
+                            driverId: user?.id,
+                            driverName: user?.name,
+                            vehiclePlate: user?.vehiclePlate,
+                            latitude: newLocation.coords.latitude,
+                            longitude: newLocation.coords.longitude,
+                            speed: newLocation.coords.speed ?? 0,
+                            timestamp: newLocation.timestamp,
+                            panicActive: panicActive
+                        });
+                    }
+
                     if (mapRef.current) {
                         mapRef.current.animateToRegion({
                             latitude: newLocation.coords.latitude,
@@ -80,7 +96,7 @@ export default function DashboardScreen() {
                 (subscription as Location.LocationSubscription).remove();
             }
         };
-    }, [isTracking]);
+    }, [isTracking, panicActive]);
 
     // Simulate network dropout to prove "100% Offline Capability"
     const toggleNetworkMode = () => {
@@ -91,8 +107,22 @@ export default function DashboardScreen() {
 
     // Trigger Ghost Panic SOS Simulation
     const handlePanicTrigger = () => {
-        setPanicActive(!panicActive);
-        if (!panicActive) {
+        const nextPanicState = !panicActive;
+        setPanicActive(nextPanicState);
+
+        // Emit instant SOS event to the server
+        if (socket && socket.connected) {
+            socket.emit('panic-alert', {
+                driverId: user?.id,
+                driverName: user?.name,
+                vehiclePlate: user?.vehiclePlate,
+                panicActive: nextPanicState,
+                latitude: location?.coords.latitude ?? 0,
+                longitude: location?.coords.longitude ?? 0,
+            });
+        }
+
+        if (nextPanicState) {
             Alert.alert(
                 "🚨 SILENT SOS CHANNELS INITIATED",
                 "HQ notified successfully.\nAudio Espionage Microphones are now live streaming to dispatch.",
